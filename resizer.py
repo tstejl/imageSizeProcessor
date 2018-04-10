@@ -18,6 +18,19 @@ class Resizer():
             raise("Unable to open " + filename)
         self.calculate_attributes()
 
+    def trace(self):
+        print("---Trace---")
+        print("filename: ", self.filename)
+        print("edges: ", *self.edges)
+        print("modify: ", *self.modify)
+        print("expand_flag: ", self.expand_flag)
+        print("edge_color: ", self.edge_color)
+        print("old_width: ", self.old_width)
+        print("old_height: ", self.old_height)
+        print("new_width: ", self.new_width)
+        print("new_height: ", self.new_height)
+        print("---Trace end---")
+
     def calculate_wh(self):
         '''
         given the img
@@ -54,12 +67,18 @@ class Resizer():
         width <= 3200 and height <= 1800
         '''
         width, height = self.img.size
-        if width < 3200 and height < 1800:
+        if width <= 3200 and height <= 1800:
+            if self.logger:
+                print("resize skipped")
             return self.img
         if width > 3200:
+            if self.logger:
+                print("resize by width (>3200)")
             ratio = 3200/width
             return self.img.resize((3200, int(height*ratio)), resample=Image.LANCZOS)
         if height > 1800:
+            if self.logger:
+                print("resize by height (>1800)")
             ratio = 1800/height
             return self.img.resize((int(width*ratio), 1800), resample=Image.LANCZOS)
 
@@ -69,12 +88,11 @@ class Resizer():
         the img in 4 directions [top, right, bottom, left]
         '''
         width, height = self.img.size
-
         modify = [0, 0, 0, 0]
         if self.expand_flag is True:
             if self.edges[0] != -1 or self.edges[2] != -1:
                 if self.edges[0] != -1 and self.edges[2] != -1:
-                    modify[0] = int((self.new_height - width) / 2)
+                    modify[0] = int((self.new_height - height) / 2)
                     modify[2] = self.new_height - height - modify[0]
                 elif self.edges[0] == -1:
                     modify[2] = self.new_height - height
@@ -98,20 +116,35 @@ class Resizer():
             print("pixels to modify (t r b l): ", *modify)
         return modify
 
-    def manually_set_edges_to_expand(self, directions):
+    def manually_set_edges_to_modify(self, directions):
         """
         directions is a list, [top, right, bottom, left];
-        each attribute can be boolean
-        e.g: if directions = [True, False, False, True],
+        each attribute can be boolean (0, 1)
+        e.g: if directions = [1, 0, 0, 1],
         then it means that the img needs to be expanded
         in top and left directions
         """
-        edges = [0, 0, 0, 0]
+        if self.logger:
+            print("manually reset edges (t r b l):", *directions)
+
+        edges = [-1, -1, -1, -1]
         for i in range(0, 4):
             if directions[i]:
                 edges[i] = 1
+        if sum(edges) == -4:
+            if self.logger:
+                print("---manually disabling expand mode---")
+                self.expand_flag = False
+        else:
+            if self.logger:
+                print("---manually enabling expand mode---")
+                self.expand_flag = True
         self.edges = edges
-        self.get_modify_edges()
+
+        self.new_width, self.new_height = self.calculate_wh()
+        if self.logger:
+            print("\trecalculated size: ", self.new_width, self.new_height)
+        self.modify = self.get_modify_edges()
 
     def save_and_overwrite_img(self, img, postfix=None):
         '''
@@ -122,9 +155,12 @@ class Resizer():
         '''
         ext_idx = self.filename.rfind(".")
         ext = self.filename[ext_idx:]
+        if postfix == None:
+            postfix = ''
         img.save(self.filename[:ext_idx] + postfix + ext, quality=95)
         if self.logger:
             print("Image saved as " + self.filename[:ext_idx] + postfix + ext)
+            print("======\n")
 
     #resize image
     def expand_or_crop_image(self):
@@ -132,15 +168,24 @@ class Resizer():
         given calculated width,height
          return the final processed image
         """
+        # if self.logger:
+        #     self.trace()
         w, h = self.new_width, self.new_height
         if self.expand_flag:
+            paste_dimensions = (self.modify[3], self.modify[0],
+                            w-self.modify[1], h-self.modify[2])
+            if self.logger:
+                print("paste dimensions: ", *paste_dimensions)
             new_img = Image.new(mode='RGB', size=(w, h))
             new_img.paste(self.edge_color, (0, 0, w, h))
-            new_img.paste(self.img, (self.modify[3], self.modify[0],
-                            w-self.modify[1], h-self.modify[2]))
+            new_img.paste(self.img, paste_dimensions)
         else:
-            new_img = self.img.crop((self.modify[3], self.modify[0],
-                        self.img.size[0]-self.modify[1], self.img.size[1]-self.modify[2]))
+            crop_dimensions = (self.modify[3], self.modify[0],
+                        self.img.size[0]-self.modify[1],
+                        self.img.size[1]-self.modify[2])
+            if self.logger:
+                print("crop dimensions: ", *crop_dimensions)
+            new_img = self.img.crop(crop_dimensions)
         if self.logger:
             print("final size: ", *new_img.size)
         return new_img
@@ -165,13 +210,14 @@ class Resizer():
             return -1
 
         if self.logger:
-            print("now opening: ", self.filename)
-            print("input size: ", *self.img.size)
+            print("Calculating attributes: ")
+            print("\tnow opening: ", self.filename)
+            print("\tinput size: ", *self.img.size)
 
         self.img = self.resize_img_keep_ratio()
         self.old_width, self.old_height = self.img.size[0], self.img.size[1]
         if self.logger:
-            print("resized size: ", *self.img.size)
+            print("\tresized size: ", *self.img.size)
 
         self.edge_color = self.img.getpixel((0, 0))
 
@@ -179,15 +225,15 @@ class Resizer():
             self.edges[i] = check_color_edge(self.img.rotate(90*i, expand=True))
 
         if self.logger:
-            print("calculated edges (t r b l): ", *self.edges)
+            print("\tcalculated edges (t r b l): ", *self.edges)
 
         # calculate correct size
         if sum(self.edges) != -4:
             self.expand_flag = True
         self.new_width, self.new_height = self.calculate_wh()
         if self.logger:
-            print("expand mode: ", self.expand_flag)
-            print("calculated size: ", self.new_width, self.new_height)
+            print("\texpand mode: ", self.expand_flag)
+            print("\tcalculated size: ", self.new_width, self.new_height)
         self.modify = self.get_modify_edges()
 
 if  __name__ == '__main__':
@@ -202,7 +248,6 @@ if  __name__ == '__main__':
     else:
         log_flag = False
     resizer = Resizer(args.filename, log_flag)
-    resizer.calculate_attributes()
     img = resizer.expand_or_crop_image()
 
     if args.save:
