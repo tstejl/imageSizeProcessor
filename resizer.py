@@ -40,6 +40,8 @@ class Resizer():
         no bigger than 3200*1800
         '''
         width, height = self.img.size
+
+
         if self.expand_flag is False:
             if width / height < 1.77:
                 while int(width / 16 * 9) != height:
@@ -173,7 +175,7 @@ class Resizer():
         w, h = self.new_width, self.new_height
         if self.expand_flag:
             paste_dimensions = (self.modify[3], self.modify[0],
-                            w-self.modify[1], h-self.modify[2])
+                            abs(w-self.modify[1]), abs(h-self.modify[2]))
             if self.logger:
                 print("paste dimensions: ", *paste_dimensions)
             new_img = Image.new(mode='RGB', size=(w, h))
@@ -181,8 +183,8 @@ class Resizer():
             new_img.paste(self.img, paste_dimensions)
         else:
             crop_dimensions = (self.modify[3], self.modify[0],
-                        self.img.size[0]-self.modify[1],
-                        self.img.size[1]-self.modify[2])
+                        abs(self.img.size[0]-self.modify[1]),
+                        abs(self.img.size[1]-self.modify[2]))
             if self.logger:
                 print("crop dimensions: ", *crop_dimensions)
             new_img = self.img.crop(crop_dimensions)
