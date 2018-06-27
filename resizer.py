@@ -31,6 +31,18 @@ class Resizer():
         print("new_height: ", self.new_height)
         print("---Trace end---")
 
+    #given width or height, find the next bigger/smaller
+    #integer value of width/height that satisfies 16:9 ratio
+    def get_smaller_height(self, h):
+        while float(h/9*16).is_integer() is False:
+            h -= 1
+        return h
+
+    def get_smaller_width(self, w):
+        while float(w/16*9).is_integer() is False:
+            w -= 1
+        return w
+
     def calculate_wh(self):
         '''
         given the img
@@ -40,7 +52,6 @@ class Resizer():
         no bigger than 3200*1800
         '''
         width, height = self.img.size
-
 
         if self.expand_flag is False:
             if width / height < 1.77:
@@ -52,7 +63,20 @@ class Resizer():
         else:
             if height <= 1080 and width <= 1920:
                 return 1920, 1080
-            if width / height > 1.77:
+
+            elif (self.edges[0] == -1 or self.edges[2] == -1) and \
+            (self.edges[1] != -1 and self.edges[3] != -1):
+                #only expand left and right
+                height = self.get_smaller_height(height)
+                width = height / 9 * 16
+
+            elif (self.edges[1] == -1 or self.edges[3] == -1) and \
+            (self.edges[2] != -1 and self.edges[4] != -1):
+                #only expand top and bottom
+                width = self.get_smaller_width(width)
+                height = width / 16 * 9
+
+            elif width / height > 1.77:
                 while int(width / 16 * 9) != width / 16 * 9:
                     width += 1
                 height = width / 16 * 9
@@ -83,6 +107,13 @@ class Resizer():
                 print("resize by height (>1800)")
             ratio = 1800/height
             return self.img.resize((int(width*ratio), 1800), resample=Image.LANCZOS)
+
+    def resize_img_by_h_and_ratio(self, ratio, h):
+        '''
+        given height and w/h ratio
+        return resized img
+        '''
+        return self.img.resize((int(h*ratio), int(h)), resample=Image.LANCZOS)
 
     def get_modify_edges(self):
         '''
@@ -144,6 +175,13 @@ class Resizer():
         self.edges = edges
 
         self.new_width, self.new_height = self.calculate_wh()
+
+        if self.img.size[1] > self.new_height:
+            self.img = self.resize_img_by_h_and_ratio(
+            self.img.size[0]/self.img.size[1], self.new_height)
+            if self.logger:
+                print("resize image to : ", self.img.size)
+
         if self.logger:
             print("\trecalculated size: ", self.new_width, self.new_height)
         self.modify = self.get_modify_edges()
@@ -177,9 +215,12 @@ class Resizer():
             paste_dimensions = (self.modify[3], self.modify[0],
                             abs(w-self.modify[1]), abs(h-self.modify[2]))
             if self.logger:
+                print("bg_size: ", w, h)
+                print("self.size:", self.img.size)
                 print("paste dimensions: ", *paste_dimensions)
             new_img = Image.new(mode='RGB', size=(w, h))
             new_img.paste(self.edge_color, (0, 0, w, h))
+
             new_img.paste(self.img, paste_dimensions)
         else:
             crop_dimensions = (self.modify[3], self.modify[0],
@@ -233,9 +274,11 @@ class Resizer():
         if sum(self.edges) != -4:
             self.expand_flag = True
         self.new_width, self.new_height = self.calculate_wh()
+
         if self.logger:
             print("\texpand mode: ", self.expand_flag)
             print("\tcalculated size: ", self.new_width, self.new_height)
+
         self.modify = self.get_modify_edges()
 
 if  __name__ == '__main__':
