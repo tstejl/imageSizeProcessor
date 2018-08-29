@@ -71,7 +71,7 @@ class Resizer():
                 width = height / 9 * 16
 
             elif (self.edges[1] == -1 or self.edges[3] == -1) and \
-            (self.edges[2] != -1 and self.edges[4] != -1):
+            (self.edges[0] != -1 and self.edges[2] != -1):
                 #only expand top and bottom
                 width = self.get_smaller_width(width)
                 height = width / 16 * 9
